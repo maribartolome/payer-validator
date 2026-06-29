@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Payer Reimbursement Validator</title>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+      :root {
+        --bg: #f6f7f9;
+        --panel: #ffffff;
+        --ink: #17202a;
+        --muted: #687381;
+        --line: #d9dee7;
+        --accent: #126b6f;
+        --accent-dark: #0f4f52;
+        --warn: #a86400;
+        --danger: #a33a32;
+        --good: #247046;
+        --info: #315e9d;
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      .topbar {
+        align-items: center;
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        gap: 24px;
+        justify-content: space-between;
+        padding: 24px 32px;
+      }
+      h1, h2, h3, p { margin: 0; }
+      h1 { font-size: 28px; font-weight: 780; letter-spacing: 0; }
+      h2 { font-size: 18px; font-weight: 760; letter-spacing: 0; }
+      .topbar p, .hint, .section-title span, .muted { color: var(--muted); }
+      .topbar p, .hint, .section-title span { font-size: 14px; margin-top: 6px; }
+      .badge {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        color: var(--accent-dark);
+        font-size: 14px;
+        font-weight: 760;
+        padding: 10px 12px;
+        white-space: nowrap;
+      }
+      main {
+        display: grid;
+        gap: 18px;
+        grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+        padding: 22px 32px 40px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 18px;
+      }
+      .full { grid-column: 1 / -1; }
+      .section-title {
+        align-items: baseline;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-bottom: 16px;
+      }
+      .form-grid {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      label {
+        color: #33404d;
+        display: grid;
+        font-size: 13px;
+        font-weight: 720;
+        gap: 6px;
+      }
+      input, select, textarea {
+        border: 1px solid #cbd2dc;
+        border-radius: 6px;
+        color: var(--ink);
+        font: inherit;
+        min-height: 40px;
+        padding: 9px 10px;
+        width: 100%;
+      }
+      textarea { min-width: 240px; resize: vertical; }
+      button {
+        background: var(--accent);
+        border: 0;
+        border-radius: 6px;
+        color: white;
+        cursor: pointer;
+        font: inherit;
+        font-weight: 760;
+        min-height: 40px;
+        padding: 10px 14px;
+      }
+      button:hover { background: var(--accent-dark); }
+      button.secondary { background: #eef3f4; color: var(--accent-dark); }
+      button.ghost { background: #f6f8fa; border: 1px solid var(--line); color: #26313d; }
+      .form-grid button { align-self: end; }
+      .upload-row {
+        align-items: center;
+        display: grid;
+        gap: 10px;
+        grid-template-columns: 1fr auto;
+      }
+      .tool-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .notice {
+        background: #fff8e8;
+        border: 1px solid #e5c27a;
+        border-radius: 8px;
+        color: #624500;
+        font-size: 14px;
+        grid-column: 1 / -1;
+        padding: 12px 14px;
+      }
+      .result {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        margin-top: 16px;
+        padding: 14px;
+      }
+      .result.empty { color: var(--muted); }
+      .result h3 { font-size: 20px; margin: 0 0 10px; }
+      .result-grid {
+        display: grid;
+        gap: 10px;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .metric {
+        background: #f7f9fb;
+        border-radius: 6px;
+        padding: 10px;
+      }
+      .metric span {
+        color: var(--muted);
+        display: block;
+        font-size: 12px;
+      }
+      .metric strong {
+        display: block;
+        font-size: 17px;
+        margin-top: 2px;
+      }
+      .status {
+        border-radius: 999px;
+        display: inline-block;
+        font-size: 12px;
+        font-weight: 800;
+        padding: 5px 9px;
+        white-space: nowrap;
+      }
+      .WithinRange { background: #e8f5ed; color: var(--good); }
+      .AtLowEnd { background: #fff2d8; color: var(--warn); }
+      .BelowRange { background: #fdecea; color: var(--danger); }
+      .AboveRange { background: #eaf1fb; color: var(--info); }
+      .NoDataAvailable { background: #eceff3; color: #505a66; }
+      .table-wrap {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: auto;
+      }
+      table {
+        border-collapse: collapse;
+        min-width: max(1080px, 100%);
+      }
+      th, td {
+        border-bottom: 1px solid var(--line);
+        font-size: 13px;
+        padding: 10px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: #f0f3f7;
+        color: #33404d;
+        font-weight: 800;
+        position: sticky;
+        top: 0;
+      }
+      tbody tr:last-child td { border-bottom: 0; }
+      .reference-table { max-height: 430px; }
+      .filters {
+        align-items: center;
+        display: flex;
+        gap: 12px;
+        justify-content: space-between;
+        margin-bottom: 12px;
+      }
+      .filters input { max-width: 420px; }
+      .preview { margin-top: 14px; }
+      .preview-actions {
+        align-items: center;
+        display: flex;
+        gap: 10px;
+        justify-content: space-between;
+        margin: 12px 0;
+      }
+      .audit-list {
+        display: grid;
+        gap: 8px;
+        list-style-position: inside;
+        margin: 0;
+        padding: 0;
+      }
+      .audit-list li {
+        background: #f7f9fb;
+        border-radius: 6px;
+        padding: 10px;
+      }
+      #reviewBody select { min-width: 180px; }
+      #reviewBody .save-review { min-width: 64px; }
+      @media (max-width: 980px) {
+        .topbar, main { padding-left: 18px; padding-right: 18px; }
+        main, .form-grid, .upload-row, .result-grid { grid-template-columns: 1fr; }
+        .section-title { align-items: flex-start; flex-direction: column; gap: 2px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>Payer Reimbursement Validator</h1>
+        <p>Validate payments against approved historical payer and CPT reimbursement ranges.</p>
+      </div>
+      <div class="badge" id="versionBadge">Loading...</div>
+    </header>
+
+    <main>
+      <div class="notice">
+        This Vercel version stores data in this browser. Upload and approve the Q1 CPT Intelligence workbook, then export a reference file for VAs to import on their computers.
+      </div>
+
+      <section class="panel validate-panel">
+        <div class="section-title">
+          <h2>Validate a Payment</h2>
+          <span>Billing VA view</span>
+        </div>
+        <form id="validateForm" class="form-grid">
+          <label>Claim number<input name="claim_number" required placeholder="CLM-10482" /></label>
+          <label>Insurance payer<input name="payer" required list="payerList" placeholder="Aetna Medicare" /></label>
+          <label>CPT code or combination<select name="cpt_combination" required></select></label>
+          <label>Billed charge<input name="billed_charge" required type="number" min="0" step="0.01" placeholder="250.00" /></label>
+          <label>Insurance payment received<input name="insurance_payment" required type="number" min="0" step="0.01" placeholder="68.50" /></label>
+          <button type="submit">Validate Payment</button>
+        </form>
+        <datalist id="payerList"></datalist>
+        <div id="validationResult" class="result empty">Enter a payment to see the range comparison.</div>
+      </section>
+
+      <section class="panel upload-panel">
+        <div class="section-title">
+          <h2>Upload Reference Data</h2>
+          <span>Administrator view</span>
+        </div>
+        <form id="uploadForm" class="upload-row">
+          <input id="claimFile" type="file" name="file" accept=".csv,.xlsx,.json" required />
+          <button type="submit">Preview Upload</button>
+        </form>
+        <p class="hint">Use the Q1 CPT Intelligence workbook or a claims report. Patient names are not required.</p>
+        <div class="tool-row">
+          <button class="ghost" type="button" id="exportData">Export approved reference</button>
+          <label class="ghost" style="display:inline-flex;align-items:center;gap:8px;padding:9px 12px;border-radius:6px;cursor:pointer;">
+            Import reference JSON
+            <input id="importJson" type="file" accept=".json" style="display:none" />
+          </label>
+          <button class="ghost" type="button" id="clearLocal">Clear this browser</button>
+        </div>
+        <div id="uploadPreview" class="preview"></div>
+      </section>
+
+      <section class="panel full">
+        <div class="section-title">
+          <h2>Management Review List</h2>
+          <span>At Low End and Below Range only</span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Claim</th><th>Payer</th><th>CPT Combination</th><th>Billed</th><th>Paid</th><th>Known Min</th><th>Known Max</th><th>Diff</th><th>Status</th><th>Notes</th><th>Outcome</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="reviewBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel full">
+        <div class="section-title">
+          <h2>Approved Reimbursement Reference</h2>
+          <span>Historical ranges, not confirmed contracts</span>
+        </div>
+        <div class="filters">
+          <input id="referenceSearch" placeholder="Search payer or CPT combination" />
+          <span id="referenceCount"></span>
+        </div>
+        <div class="table-wrap reference-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Payer</th><th>CPT Code or Combination</th><th>Average Paid</th><th>Reimbursement Rate</th><th>Minimum Paid</th><th>Maximum Paid</th><th>Paid Claims</th><th>Last Updated</th>
+              </tr>
+            </thead>
+            <tbody id="referenceBody"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel full">
+        <div class="section-title">
+          <h2>Audit History</h2>
+          <span>Uploads, approvals, and review decisions</span>
+        </div>
+        <ol id="auditList" class="audit-list"></ol>
+      </section>
+    </main>
+
+    <script>
+      const STORAGE_KEY = "payerReimbursementValidator.v2";
+      const moneyFmt = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+      const percentFmt = new Intl.NumberFormat("en-US", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 1 });
+      const outcomes = ["Payment is correct", "Needs investigation", "Possible underpayment", "Appeal required", "No appeal required", "Resolved"];
+      const state = loadLocal();
+
+      function today() { return new Date().toISOString().slice(0, 10); }
+      function now() { return new Date().toISOString(); }
+      function id(prefix) { return `${prefix}_${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`; }
+      function clean(value) { return value == null ? "" : String(value).trim(); }
+      function escapeHtml(value) {
+        return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;");
+      }
+      function dollars(value) { return value == null || Number.isNaN(Number(value)) ? "—" : moneyFmt.format(Number(value)); }
+      function rate(value) { return value == null || Number.isNaN(Number(value)) ? "—" : percentFmt.format(Number(value)); }
+      function amount(value) {
+        if (value == null) return 0;
+        if (typeof value === "number") return Math.round(value * 100) / 100;
+        const cleaned = String(value).replace(/[^0-9.-]/g, "");
+        const parsed = Number(cleaned);
+        return Number.isFinite(parsed) ? Math.round(parsed * 100) / 100 : 0;
+      }
+      function normalizeCombo(value) {
+        const text = clean(value).toUpperCase();
+        const parts = text.match(/[A-Z]?\d{4,5}[A-Z]?/g) || text.split(/\s*\+\s*|,\s*|\s{2,}/).filter(Boolean);
+        return parts.map((part) => clean(part).toUpperCase()).filter(Boolean).sort().join(" + ");
+      }
+      function keyFor(row) { return `${clean(row.payer).toLowerCase()}||${clean(row.cpt_combination).toLowerCase()}`; }
+      function headerKey(value) { return clean(value).toLowerCase().replace(/[^a-z0-9]/g, ""); }
+      function loadLocal() {
+        const fallback = { activeVersion: 1, referenceRecords: [], pendingUpload: null, reviews: [], validations: [], auditLog: [{ at: now(), action: "Started app", detail: "No approved reference data loaded yet." }] };
+        try { return { ...fallback, ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") }; }
+        catch { return fallback; }
+      }
+      function saveLocal() { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+      function parseWorkbook(workbook, source) {
+        let best = [];
+        for (const sheetName of workbook.SheetNames) {
+          const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" });
+          for (let h = 0; h < Math.min(rows.length, 30); h++) {
+            const headers = rows[h].map(headerKey);
+            const idx = Object.fromEntries(headers.map((name, i) => [name, i]));
+            const isQ1 = ["insurance", "cptcombination", "insurancepaidclaims", "averagepaidclaim", "minimumpaidclaim", "maximumpaidclaim"].every((name) => idx[name] != null);
+            if (!isQ1) continue;
+            const parsed = rows.slice(h + 1).map((row) => {
+              const get = (name) => row[idx[name]];
+              const paidClaims = Math.trunc(amount(get("insurancepaidclaims")));
+              const minimum = amount(get("minimumpaidclaim"));
+              const maximum = amount(get("maximumpaidclaim"));
+              const totalPaid = amount(get("totalinsurancepaid"));
+              const totalCharges = amount(get("totalcharges"));
+              const yieldValue = Number(get("insuranceyield"));
+              return {
+                id: id("ref"),
+                payer: clean(get("insurance")),
+                cpt_combination: normalizeCombo(get("cptcombination")),
+                paid_claim_count: paidClaims,
+                total_insurance_payments: totalPaid,
+                total_billed_charges: totalCharges,
+                minimum_paid_claim_amount: minimum,
+                maximum_paid_claim_amount: maximum,
+                source,
+                last_updated: today(),
+                average_amount_paid: amount(get("averagepaidclaim")),
+                insurance_reimbursement_rate: Number.isFinite(yieldValue) && yieldValue > 0 ? Math.round(yieldValue * 10000) / 10000 : (totalCharges ? Math.round((totalPaid / totalCharges) * 10000) / 10000 : 0),
+              };
+            }).filter((row) => row.payer && row.cpt_combination && row.paid_claim_count > 0 && row.minimum_paid_claim_amount > 0 && row.maximum_paid_claim_amount > 0);
+            if (parsed.length > best.length) best = parsed;
+          }
+        }
+        return best.sort((a, b) => a.payer.localeCompare(b.payer) || a.cpt_combination.localeCompare(b.cpt_combination));
+      }
+
+      function parseClaimsWorkbook(workbook, source) {
+        const claimRows = [];
+        for (const sheetName of workbook.SheetNames) {
+          const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, defval: "" });
+          for (let h = 0; h < Math.min(rows.length, 20); h++) {
+            const headers = rows[h].map(headerKey);
+            const idx = Object.fromEntries(headers.map((name, i) => [name, i]));
+            const score = headers.filter((h) => /payer|insurance|claim|invoice|cpt|billed|charge|payment|paid/.test(h)).length;
+            if (score < 3) continue;
+            const find = (...names) => names.map(headerKey).find((name) => idx[name] != null);
+            const payerCol = find("Insurance payer", "Insurance", "Payer", "Carrier");
+            const claimCol = find("Claim or invoice number", "Claim Number", "Invoice Number", "Invoice", "Account Number");
+            const cptCol = find("CPT code", "CPT Code", "CPT Combination", "Procedure Code", "Code");
+            const billedCol = find("Billed charge", "Billed Charge", "Charge", "Charges", "Total Billed");
+            const paidCol = find("Insurance payment", "Insurance Payment", "Paid Amount", "Payment", "Paid", "Total Reimbursement");
+            rows.slice(h + 1).forEach((row, rowIndex) => {
+              const payer = clean(row[idx[payerCol]]);
+              const cpt = normalizeCombo(row[idx[cptCol]]);
+              if (!payer || !cpt) return;
+              claimRows.push({
+                payer,
+                claim: clean(row[idx[claimCol]]) || `row-${rowIndex}`,
+                cpt,
+                billed: amount(row[idx[billedCol]]),
+                paid: amount(row[idx[paidCol]]),
+              });
+            });
+            break;
+          }
+        }
+        return referenceFromClaims(claimRows, source);
+      }
+
+      function referenceFromClaims(rows, source) {
+        const claims = new Map();
+        rows.forEach((row) => {
+          const key = `${row.payer.toLowerCase()}||${row.claim}`;
+          const claim = claims.get(key) || { payer: row.payer, cpts: [], billed: 0, paid: 0 };
+          claim.cpts.push(...row.cpt.split(" + "));
+          claim.billed += row.billed;
+          claim.paid += row.paid;
+          claims.set(key, claim);
+        });
+        const buckets = new Map();
+        for (const claim of claims.values()) {
+          if (claim.paid <= 0) continue;
+          const combo = normalizeCombo(claim.cpts.join(" + "));
+          const key = `${claim.payer.toLowerCase()}||${combo.toLowerCase()}`;
+          const bucket = buckets.get(key) || { id: id("ref"), payer: claim.payer, cpt_combination: combo, paid_claim_count: 0, total_insurance_payments: 0, total_billed_charges: 0, minimum_paid_claim_amount: null, maximum_paid_claim_amount: null, source, last_updated: today() };
+          bucket.paid_claim_count += 1;
+          bucket.total_insurance_payments += claim.paid;
+          bucket.total_billed_charges += claim.billed;
+          bucket.minimum_paid_claim_amount = bucket.minimum_paid_claim_amount == null ? claim.paid : Math.min(bucket.minimum_paid_claim_amount, claim.paid);
+          bucket.maximum_paid_claim_amount = bucket.maximum_paid_claim_amount == null ? claim.paid : Math.max(bucket.maximum_paid_claim_amount, claim.paid);
+          buckets.set(key, bucket);
+        }
+        return Array.from(buckets.values()).map((row) => ({
+          ...row,
+          total_insurance_payments: amount(row.total_insurance_payments),
+          total_billed_charges: amount(row.total_billed_charges),
+          minimum_paid_claim_amount: amount(row.minimum_paid_claim_amount),
+          maximum_paid_claim_amount: amount(row.maximum_paid_claim_amount),
+          average_amount_paid: amount(row.total_insurance_payments / row.paid_claim_count),
+          insurance_reimbursement_rate: row.total_billed_charges ? Math.round((row.total_insurance_payments / row.total_billed_charges) * 10000) / 10000 : 0,
+        })).sort((a, b) => a.payer.localeCompare(b.payer) || a.cpt_combination.localeCompare(b.cpt_combination));
+      }
+
+      function previewIncoming(records, filename) {
+        const active = new Map(state.referenceRecords.map((row) => [keyFor(row), row]));
+        const preview = records.map((row) => ({ ...row, preview_status: active.has(keyFor(row)) ? "Updated" : "New" }));
+        state.pendingUpload = { id: id("upload"), filename, records, preview, uploaded_at: now() };
+        saveLocal();
+        renderUploadPreview();
+      }
+
+      function approveUpload() {
+        if (!state.pendingUpload) return;
+        const active = new Map(state.referenceRecords.map((row) => [keyFor(row), row]));
+        state.pendingUpload.records.forEach((row) => active.set(keyFor(row), { ...row, source: `Approved upload: ${state.pendingUpload.filename}`, last_updated: today() }));
+        state.referenceRecords = Array.from(active.values()).sort((a, b) => a.payer.localeCompare(b.payer) || a.cpt_combination.localeCompare(b.cpt_combination));
+        state.activeVersion = Number(state.activeVersion || 1) + 1;
+        state.auditLog.unshift({ at: now(), action: "Approved reimbursement data", detail: `${state.pendingUpload.filename}: ${state.pendingUpload.records.length} payer/CPT ranges activated.` });
+        state.pendingUpload = null;
+        saveLocal();
+        renderAll();
+        document.getElementById("uploadPreview").innerHTML = `<p class="muted">Approved. ${state.referenceRecords.length} reference ranges are now active in this browser.</p>`;
+      }
+
+      function comparePayment(payment, reference) {
+        if (!reference) return ["No Data Available", null];
+        const min = Number(reference.minimum_paid_claim_amount);
+        const max = Number(reference.maximum_paid_claim_amount);
+        const diff = Math.round((payment - min) * 100) / 100;
+        if (payment < min) return ["Below Range", diff];
+        if (payment <= Math.round(min * 1.05 * 100) / 100) return ["At Low End", diff];
+        if (payment > max) return ["Above Range", diff];
+        return ["Within Range", diff];
+      }
+
+      function renderAll() {
+        document.getElementById("versionBadge").textContent = `Version ${state.activeVersion || 1} · ${state.referenceRecords.length} ranges`;
+        renderPayers();
+        renderCptOptions();
+        renderReference();
+        renderReviews();
+        renderAudit();
+      }
+      function renderPayers() {
+        const payers = [...new Set(state.referenceRecords.map((row) => row.payer))].sort();
+        document.getElementById("payerList").innerHTML = payers.map((payer) => `<option value="${escapeHtml(payer)}"></option>`).join("");
+      }
+      function renderCptOptions() {
+        const payer = document.querySelector('input[name="payer"]').value.trim().toLowerCase();
+        const select = document.querySelector('select[name="cpt_combination"]');
+        const current = select.value;
+        const rows = state.referenceRecords.filter((row) => !payer || row.payer.toLowerCase() === payer);
+        const combos = [...new Set(rows.map((row) => row.cpt_combination))].sort();
+        select.innerHTML = [`<option value="">Choose a CPT combination</option>`, ...combos.map((combo) => `<option value="${escapeHtml(combo)}">${escapeHtml(combo)}</option>`)].join("");
+        if (combos.includes(current)) select.value = current;
+      }
+      function renderReference() {
+        const query = document.getElementById("referenceSearch").value.trim().toLowerCase();
+        const rows = state.referenceRecords.filter((row) => !query || `${row.payer} ${row.cpt_combination}`.toLowerCase().includes(query));
+        document.getElementById("referenceCount").textContent = `${rows.length} shown`;
+        document.getElementById("referenceBody").innerHTML = rows.slice(0, 700).map((row) => `<tr><td>${escapeHtml(row.payer)}</td><td>${escapeHtml(row.cpt_combination)}</td><td>${dollars(row.average_amount_paid)}</td><td>${rate(row.insurance_reimbursement_rate)}</td><td>${dollars(row.minimum_paid_claim_amount)}</td><td>${dollars(row.maximum_paid_claim_amount)}</td><td>${row.paid_claim_count}</td><td>${escapeHtml(row.last_updated)}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">No reference data loaded yet. Upload and approve the Q1 CPT Intelligence workbook.</td></tr>`;
+      }
+      function renderReviews() {
+        document.getElementById("reviewBody").innerHTML = state.reviews.length ? state.reviews.map((row) => `<tr data-review-id="${row.id}"><td>${escapeHtml(row.claim_number)}</td><td>${escapeHtml(row.payer)}</td><td>${escapeHtml(row.cpt_combination)}</td><td>${dollars(row.billed_charge)}</td><td>${dollars(row.insurance_payment)}</td><td>${dollars(row.known_minimum_payment)}</td><td>${dollars(row.known_maximum_payment)}</td><td>${dollars(row.difference_from_minimum)}</td><td><span class="status ${row.status.replaceAll(" ", "")}">${escapeHtml(row.status)}</span></td><td><textarea rows="2">${escapeHtml(row.management_notes || "")}</textarea></td><td><select>${outcomes.map((option) => `<option ${option === row.review_outcome ? "selected" : ""}>${option}</option>`).join("")}</select></td><td><button class="secondary save-review">Save</button></td></tr>`).join("") : `<tr><td colspan="12" class="muted">No flagged payments are waiting for review.</td></tr>`;
+      }
+      function renderAudit() {
+        document.getElementById("auditList").innerHTML = state.auditLog.slice(0, 12).map((entry) => `<li><strong>${escapeHtml(entry.action)}</strong><br><span class="muted">${escapeHtml(entry.at || "")} · ${escapeHtml(entry.detail || "")}</span></li>`).join("");
+      }
+      function renderUploadPreview() {
+        const upload = state.pendingUpload;
+        if (!upload) return;
+        const counts = upload.preview.reduce((acc, row) => (acc[row.preview_status] = (acc[row.preview_status] || 0) + 1, acc), {});
+        document.getElementById("uploadPreview").innerHTML = `<div class="preview-actions"><div><strong>${escapeHtml(upload.filename)}</strong><br><span class="muted">${upload.records.length} payer/CPT ranges · ${counts.New || 0} new · ${counts.Updated || 0} updated</span></div><button id="approveUpload" type="button">Approve and Activate</button></div><div class="table-wrap"><table><thead><tr><th>Status</th><th>Payer</th><th>CPT Combination</th><th>Average</th><th>Rate</th><th>Min</th><th>Max</th><th>Paid Claims</th></tr></thead><tbody>${upload.preview.slice(0, 15).map((row) => `<tr><td>${row.preview_status}</td><td>${escapeHtml(row.payer)}</td><td>${escapeHtml(row.cpt_combination)}</td><td>${dollars(row.average_amount_paid)}</td><td>${rate(row.insurance_reimbursement_rate)}</td><td>${dollars(row.minimum_paid_claim_amount)}</td><td>${dollars(row.maximum_paid_claim_amount)}</td><td>${row.paid_claim_count}</td></tr>`).join("")}</tbody></table></div>`;
+      }
+
+      document.getElementById("uploadForm").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const file = document.getElementById("claimFile").files[0];
+        if (!file) return;
+        document.getElementById("uploadPreview").innerHTML = `<p class="muted">Reading file...</p>`;
+        try {
+          if (file.name.toLowerCase().endsWith(".json")) {
+            const imported = JSON.parse(await file.text());
+            previewIncoming(imported.referenceRecords || imported.reference_records || imported.records || [], file.name);
+            return;
+          }
+          const buffer = await file.arrayBuffer();
+          const workbook = XLSX.read(buffer, { type: "array", cellDates: true });
+          let records = parseWorkbook(workbook, file.name);
+          if (!records.length) records = parseClaimsWorkbook(workbook, file.name);
+          if (!records.length) throw new Error("No usable payer/CPT reimbursement ranges were found.");
+          previewIncoming(records, file.name);
+        } catch (error) {
+          document.getElementById("uploadPreview").innerHTML = `<p class="muted">${escapeHtml(error.message)}</p>`;
+        }
+      });
+      document.getElementById("uploadPreview").addEventListener("click", (event) => {
+        if (event.target.id === "approveUpload") approveUpload();
+      });
+      document.getElementById("validateForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        const claim_number = clean(form.get("claim_number"));
+        const payer = clean(form.get("payer"));
+        const cpt_combination = normalizeCombo(form.get("cpt_combination"));
+        const billed_charge = amount(form.get("billed_charge"));
+        const insurance_payment = amount(form.get("insurance_payment"));
+        const reference = state.referenceRecords.find((row) => row.payer.toLowerCase() === payer.toLowerCase() && row.cpt_combination.toLowerCase() === cpt_combination.toLowerCase());
+        const [status, difference] = comparePayment(insurance_payment, reference);
+        const validation = { claim_number, payer, cpt_combination, billed_charge, insurance_payment, known_average_payment: reference?.average_amount_paid, known_reimbursement_rate: reference?.insurance_reimbursement_rate, known_minimum_payment: reference?.minimum_paid_claim_amount, known_maximum_payment: reference?.maximum_paid_claim_amount, difference_from_minimum: difference, status };
+        document.getElementById("validationResult").className = `result ${status.replaceAll(" ", "")}`;
+        document.getElementById("validationResult").innerHTML = `<h3><span class="status ${status.replaceAll(" ", "")}">${escapeHtml(status)}</span></h3><div class="result-grid"><div class="metric"><span>Known average payment</span><strong>${dollars(validation.known_average_payment)}</strong></div><div class="metric"><span>Known reimbursement rate</span><strong>${rate(validation.known_reimbursement_rate)}</strong></div><div class="metric"><span>Known minimum payment</span><strong>${dollars(validation.known_minimum_payment)}</strong></div><div class="metric"><span>Known maximum payment</span><strong>${dollars(validation.known_maximum_payment)}</strong></div><div class="metric"><span>Difference from minimum</span><strong>${dollars(validation.difference_from_minimum)}</strong></div><div class="metric"><span>Claim payment received</span><strong>${dollars(validation.insurance_payment)}</strong></div></div>`;
+        state.validations.unshift({ ...validation, id: id("val"), created_at: now() });
+        if (["At Low End", "Below Range"].includes(status)) {
+          state.reviews.unshift({ ...validation, id: id("review"), created_at: now(), management_notes: "", review_outcome: "Needs investigation" });
+        }
+        saveLocal();
+        renderReviews();
+      });
+      document.getElementById("reviewBody").addEventListener("click", (event) => {
+        if (!event.target.classList.contains("save-review")) return;
+        const tr = event.target.closest("tr");
+        const review = state.reviews.find((row) => row.id === tr.dataset.reviewId);
+        if (!review) return;
+        review.management_notes = tr.querySelector("textarea").value;
+        review.review_outcome = tr.querySelector("select").value;
+        state.auditLog.unshift({ at: now(), action: "Updated management review", detail: `Claim ${review.claim_number} marked ${review.review_outcome}.` });
+        saveLocal();
+        renderAll();
+      });
+      document.getElementById("exportData").addEventListener("click", () => {
+        const blob = new Blob([JSON.stringify({ exported_at: now(), referenceRecords: state.referenceRecords }, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `payer-reference-${today()}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+      });
+      document.getElementById("importJson").addEventListener("change", async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        const imported = JSON.parse(await file.text());
+        state.referenceRecords = imported.referenceRecords || imported.reference_records || imported.records || [];
+        state.activeVersion = Number(state.activeVersion || 1) + 1;
+        state.auditLog.unshift({ at: now(), action: "Imported reference data", detail: `${state.referenceRecords.length} payer/CPT ranges imported from JSON.` });
+        saveLocal();
+        renderAll();
+      });
+      document.getElementById("clearLocal").addEventListener("click", () => {
+        if (!confirm("Clear all reference data, reviews, and audit history from this browser?")) return;
+        localStorage.removeItem(STORAGE_KEY);
+        location.reload();
+      });
+      document.getElementById("referenceSearch").addEventListener("input", renderReference);
+      document.querySelector('input[name="payer"]').addEventListener("input", renderCptOptions);
+      renderAll();
+    </script>
+  </body>
+</html>
