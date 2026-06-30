@@ -223,7 +223,9 @@
         padding: 10px;
       }
       #reviewBody select { min-width: 180px; }
-      #reviewBody .save-review { min-width: 64px; }
+      #reviewBody .save-review, #reviewBody .delete-review { min-width: 64px; }
+      button.danger { background: #fdecea; color: var(--danger); }
+      button.danger:hover { background: #f8d4d0; }
       .toast {
         background: #e8f5ed;
         border: 1px solid #b8dec7;
@@ -300,7 +302,7 @@
           <table>
             <thead>
               <tr>
-                <th>Claim</th><th>Payer</th><th>CPT Combination</th><th>Billed</th><th>Paid</th><th>Known Min</th><th>Known Max</th><th>Diff</th><th>Status</th><th>Notes</th><th>Outcome</th><th></th>
+                <th>Claim</th><th>Payer</th><th>CPT Combination</th><th>Billed</th><th>Paid</th><th>Known Min</th><th>Known Max</th><th>Diff</th><th>Status</th><th>Notes</th><th>Outcome</th><th></th><th></th>
               </tr>
             </thead>
             <tbody id="reviewBody"></tbody>
@@ -540,7 +542,7 @@
         document.getElementById("referenceBody").innerHTML = rows.slice(0, 700).map((row) => `<tr><td>${escapeHtml(row.payer)}</td><td>${escapeHtml(row.cpt_combination)}</td><td>${dollars(row.average_amount_paid)}</td><td>${rate(row.insurance_reimbursement_rate)}</td><td>${dollars(row.minimum_paid_claim_amount)}</td><td>${dollars(row.maximum_paid_claim_amount)}</td><td>${row.paid_claim_count}</td><td>${escapeHtml(row.last_updated)}</td></tr>`).join("") || `<tr><td colspan="8" class="muted">No reference data loaded yet. Upload and approve the Q1 CPT Intelligence workbook.</td></tr>`;
       }
       function renderReviews() {
-        document.getElementById("reviewBody").innerHTML = state.reviews.length ? state.reviews.map((row) => `<tr data-review-id="${row.id}"><td>${escapeHtml(row.claim_number)}</td><td>${escapeHtml(row.payer)}</td><td>${escapeHtml(row.cpt_combination)}</td><td>${dollars(row.billed_charge)}</td><td>${dollars(row.insurance_payment)}</td><td>${dollars(row.known_minimum_payment)}</td><td>${dollars(row.known_maximum_payment)}</td><td>${dollars(row.difference_from_minimum)}</td><td><span class="status ${row.status.replaceAll(" ", "")}">${escapeHtml(row.status)}</span></td><td><textarea rows="2">${escapeHtml(row.management_notes || "")}</textarea></td><td><select>${outcomes.map((option) => `<option ${option === row.review_outcome ? "selected" : ""}>${option}</option>`).join("")}</select></td><td><button class="secondary save-review">Save</button></td></tr>`).join("") : `<tr><td colspan="12" class="muted">No flagged payments are waiting for review.</td></tr>`;
+        document.getElementById("reviewBody").innerHTML = state.reviews.length ? state.reviews.map((row) => `<tr data-review-id="${row.id}"><td>${escapeHtml(row.claim_number)}</td><td>${escapeHtml(row.payer)}</td><td>${escapeHtml(row.cpt_combination)}</td><td>${dollars(row.billed_charge)}</td><td>${dollars(row.insurance_payment)}</td><td>${dollars(row.known_minimum_payment)}</td><td>${dollars(row.known_maximum_payment)}</td><td>${dollars(row.difference_from_minimum)}</td><td><span class="status ${row.status.replaceAll(" ", "")}">${escapeHtml(row.status)}</span></td><td><textarea rows="2">${escapeHtml(row.management_notes || "")}</textarea></td><td><select>${outcomes.map((option) => `<option ${option === row.review_outcome ? "selected" : ""}>${option}</option>`).join("")}</select></td><td><button class="secondary save-review">Save</button></td><td><button class="danger delete-review">Delete</button></td></tr>`).join("") : `<tr><td colspan="13" class="muted">No flagged payments are waiting for review.</td></tr>`;
       }
       function showReviewMessage(message) {
         const box = document.getElementById("reviewMessage");
@@ -604,10 +606,20 @@
         renderReviews();
       });
       document.getElementById("reviewBody").addEventListener("click", (event) => {
-        if (!event.target.classList.contains("save-review")) return;
         const tr = event.target.closest("tr");
+        if (!tr) return;
         const review = state.reviews.find((row) => row.id === tr.dataset.reviewId);
         if (!review) return;
+        if (event.target.classList.contains("delete-review")) {
+          if (!confirm(`Delete claim ${review.claim_number} from the review list?`)) return;
+          state.reviews = state.reviews.filter((row) => row.id !== review.id);
+          state.auditLog.unshift({ at: now(), action: "Deleted management review", detail: `Claim ${review.claim_number} was removed from the review list.` });
+          saveLocal();
+          renderAll();
+          showReviewMessage(`Claim ${review.claim_number} deleted from the review list.`);
+          return;
+        }
+        if (!event.target.classList.contains("save-review")) return;
         review.management_notes = tr.querySelector("textarea").value;
         review.review_outcome = tr.querySelector("select").value;
         state.auditLog.unshift({ at: now(), action: "Updated management review", detail: `Claim ${review.claim_number} marked ${review.review_outcome}.` });
